@@ -60,7 +60,18 @@ def get_deps(pkg: str, platform: str, pyver: str, failed_dir: str = "failed_pkgs
             os.remove(tmp_path)
 
 
+def download_python_versions():
+    print("Ensuring Python versions are installed...")
+    for pyver in PYTHON_VERSIONS:
+        try:
+            subprocess.run(["uv", "python", "install", pyver], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Failed to install Python {pyver}: {e}")
+
+
 if __name__ == "__main__":
+    download_python_versions()
+
     with open("wishlist.txt", "r") as f:
         # Strip whitespace to ensure clean package names
         INPUT_PACKAGES: list[str] = [line.strip() for line in f.readlines() if line.strip()]

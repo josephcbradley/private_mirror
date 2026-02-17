@@ -19,7 +19,7 @@ uv run bandersnatch -c bd.conf mirror
 to download. Lastly, to serve:
 
 ```sh
-uv run python -m http.server 8080 --directory ./simple/web/simpl
+uv run python -m http.server 8080 --directory ./simple/web/
 ```
 
 There is a `systemd` service ready in `private_mirror.service` to be registered at your leisure. Save to `/etc/systemd/system/private-mirror.service` and then:
@@ -30,3 +30,13 @@ sudo systemctl enable private-mirror
 sudo systemctl start private-mirror
 sudo systemctl status private-mirror
 ```
+
+To set up uv, add the following to the user wide `uv.toml`:
+
+```toml
+[[index]]
+url = "http://<IPADDR>:8080/simple/"
+default = true
+```
+
+RSM also downloads Python versions, but this is WIP. 

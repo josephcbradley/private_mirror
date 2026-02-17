@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=joseph
 WorkingDirectory=/home/joseph/dev/private_mirror
-ExecStart=uv run python -m http.server 8080 --directory ./simple/web/simple
+ExecStart=uv run python -m http.server 8080 --directory ./simple/web/
 Restart=on-failure
 
 [Install]
