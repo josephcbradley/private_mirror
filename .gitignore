@@ -14,4 +14,4 @@ packages/
 requirements.*
 bd.conf
 diffs.txt
-
+failed_pkgs.txt
