@@ -11,6 +11,7 @@ PYTHON_VERSIONS = ["3.12", "3.13", "3.14", "3.15"]
 BD_TEMPLATE_PATH = "bd_template.conf"
 BD_CONF_PATH = "bd.conf"
 
+TIMEOUT = 10
 
 def get_deps(pkg, platform, pyver, failed_dir: str = "failed_pkgs.txt") -> list[str]:
     reqs_in_path = "requirements.in"
@@ -21,7 +22,9 @@ def get_deps(pkg, platform, pyver, failed_dir: str = "failed_pkgs.txt") -> list[
     )
 
     try:
-        result = subprocess.run(cmd, capture_output=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, check=True, timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Dependency resolution timed out for {pkg}, {pyver}, {platform} (>{TIMEOUT}s)")
     except Exception as e:
         print(f"No resolution found for {pkg}, {pyver}, {platform}: {e}")
         with open(failed_dir, "a") as f:
