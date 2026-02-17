@@ -1,4 +1,8 @@
 import subprocess
+import tempfile
+import os
+import concurrent.futures
+from threading import Lock
 from tqdm import tqdm
 
 TARGET_PLATFORMS = [
@@ -13,48 +17,76 @@ BD_CONF_PATH = "bd.conf"
 
 TIMEOUT = 15
 
-def get_deps(pkg, platform, pyver, failed_dir: str = "failed_pkgs.txt") -> list[str]:
-    reqs_in_path = "requirements.in"
-    with open(reqs_in_path, "w") as f:
-        f.write(package)
-    cmd = f"uv pip compile --python-platform {platform} --python-version {pyver} requirements.in".rsplit(
-        " "
-    )
+# Lock for writing to failed packages file
+failure_log_lock = Lock()
+
+def get_deps(pkg: str, platform: str, pyver: str, failed_dir: str = "failed_pkgs.txt") -> list[str]:
+    # Use a temporary file for requirements to avoid race conditions
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".in") as tmp:
+        tmp_path = tmp.name
+        tmp.write(pkg)
+    
+    cmd = [
+        "uv", "pip", "compile", 
+        "--python-platform", platform, 
+        "--python-version", pyver, 
+        tmp_path
+    ]
 
     try:
         result = subprocess.run(cmd, capture_output=True, check=True, timeout=TIMEOUT)
+        
+        decoded = result.stdout.decode("utf-8", errors="replace")
+        filtered_lines = [line for line in decoded.splitlines() if "#" not in line]
+        return filtered_lines
+
     except subprocess.TimeoutExpired:
         print(f"Dependency resolution timed out for {pkg}, {pyver}, {platform} (>{TIMEOUT}s)")
-        with open(failed_dir, "a") as f:
-            f.write(f"{pkg},{pyver},{platform}\n")
-        return None
+        with failure_log_lock:
+            with open(failed_dir, "a") as f:
+                f.write(f"{pkg},{pyver},{platform}\n")
+        return []
 
     except Exception as e:
         print(f"No resolution found for {pkg}, {pyver}, {platform}: {e}")
-        with open(failed_dir, "a") as f:
-            f.write(f"{pkg},{pyver},{platform}\n")
-        return None
-
-    decoded = result.stdout.decode("utf-8", errors="replace")
-    filtered_lines = [line for line in decoded.splitlines() if "#" not in line]
-
-    return filtered_lines
+        with failure_log_lock:
+            with open(failed_dir, "a") as f:
+                f.write(f"{pkg},{pyver},{platform}\n")
+        return []
+    
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 if __name__ == "__main__":
     with open("wishlist.txt", "r") as f:
-        INPUT_PACKAGES: list[str] = f.readlines()
+        # Strip whitespace to ensure clean package names
+        INPUT_PACKAGES: list[str] = [line.strip() for line in f.readlines() if line.strip()]
 
     complete_deps_list = []
+    tasks = []
+
+    # Prepare all tasks
     for platform in TARGET_PLATFORMS:
         for pyver in PYTHON_VERSIONS:
-            print(f"Beginning resolution for {platform} {pyver}:")
-            for package in tqdm(INPUT_PACKAGES):
-                new_lines = get_deps(package, platform, pyver)
-                if new_lines:
-                    complete_deps_list.extend(new_lines)
+            for package in INPUT_PACKAGES:
+                tasks.append((package, platform, pyver))
 
-    complete_deps_list = list(set(complete_deps_list))
+    print(f"Starting resolution for {len(tasks)} tasks...")
+
+    # Execute tasks in parallel
+    # Adjust max_workers based on system capabilities or limit if needed (e.g., max_workers=8)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(get_deps, pkg, plat, py) for pkg, plat, py in tasks]
+        
+        for future in tqdm(concurrent.futures.as_completed(futures), total=len(tasks)):
+            result = future.result()
+            if result:
+                complete_deps_list.extend(result)
+
+    complete_deps_list = sorted(set(complete_deps_list))
 
     with open(BD_TEMPLATE_PATH, "r") as bd_template_file:
         bd_template_text = bd_template_file.read()
