@@ -1,0 +1,5 @@
+chromadb
+flask
+requests
+gradio
+polars

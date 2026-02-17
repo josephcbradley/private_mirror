@@ -1,0 +1,13 @@
+[Unit]
+Description=Private PyPI Mirror
+After=network.target
+
+[Service]
+Type=simple
+User=joseph
+WorkingDirectory=/home/joseph/dev/private_mirror
+ExecStart=uv run python -m http.server 8080 --directory ./simple/web/simple
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
